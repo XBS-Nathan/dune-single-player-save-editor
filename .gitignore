@@ -1,0 +1,9 @@
+node_modules/
+.env
+
+# Player-state dumps (large + contain account-tied IDs)
+backup-customizations-*.json
+backup-tech-*.json
+snapshot-player-*.json
+player-properties-dump.json
+canonical-customizations.json

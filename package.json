@@ -1,0 +1,12 @@
+{
+  "name": "dune",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:connection": "node test-connection.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
