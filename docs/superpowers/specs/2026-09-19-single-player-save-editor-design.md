@@ -43,7 +43,7 @@ Two separate things, both supported:
 
 ## Commands
 
-All commands need `--save <path to game.db>`. The tool never finds the real save by itself.
+Every command except `find` (which only searches the catalogue) needs `--save <path to game.db>`. The tool never finds the real save by itself.
 
 ```
 node single-player.mjs --save <path> info
@@ -87,9 +87,10 @@ SQLite access uses Node's built-in `node:sqlite` (Node 24), so there are no new 
   `0 .. max_item_count-1`.
 - **Item ids**: read `next_id`, use it for each new row, and write back the next
   unused value. Also make sure it stays above `max(items.id)`.
-- **Scope limit**: `give` only accepts catalogue categories `resources`,
-  `consumables` and `misc`. Weapons, clothing and the rest need durability,
-  augment or unlock data, so they are refused. The catalogue has 2558 entries
+- **Scope limit**: `give` only accepts catalogue categories `resources` and
+  `consumables`. Weapons, clothing and the rest need durability, augment or
+  unlock data, so they are refused. `misc` is excluded too: it holds
+  reputation tokens and unique power packs, not plain stackable items. The catalogue has 2558 entries
   but only 97 carry `stackSize`/`volume` (mostly resources), which is why the
   1000 default and `--stack` exist.
 - **Volume**: if the backpack has `max_item_volume > 0` and the catalogue knows
