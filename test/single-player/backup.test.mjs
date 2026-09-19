@@ -1,0 +1,57 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { makeSaveFixture } from "./helpers.mjs";
+import { backupName, backupSaveFolder, listBackups, restoreBackup } from "../../single-player/backup.mjs";
+
+const T1 = new Date("2026-09-19T20:00:00.000Z");
+const T2 = new Date("2026-09-19T20:05:00.000Z");
+
+test("backup names are timestamps that sort in time order", () => {
+  assert.equal(backupName(T1), "2026-09-19T20-00-00-000Z");
+});
+
+test("backupSaveFolder copies the whole save folder", (t) => {
+  const f = makeSaveFixture();
+  t.after(f.cleanup);
+  const b = backupSaveFolder(f.savePath, f.backupRoot, T1);
+  assert.equal(b.name, "2026-09-19T20-00-00-000Z");
+  assert.deepEqual(readFileSync(join(b.path, "game.db")), readFileSync(f.savePath));
+  assert.equal(readFileSync(join(b.path, "autosave", "0.bak"), "utf8"), "autosave-bytes");
+});
+
+test("backupSaveFolder never overwrites an existing backup", (t) => {
+  const f = makeSaveFixture();
+  t.after(f.cleanup);
+  backupSaveFolder(f.savePath, f.backupRoot, T1);
+  assert.throws(() => backupSaveFolder(f.savePath, f.backupRoot, T1), /already exists/);
+});
+
+test("listBackups is empty before any backup, then sorted", (t) => {
+  const f = makeSaveFixture();
+  t.after(f.cleanup);
+  assert.deepEqual(listBackups(f.backupRoot), []);
+  backupSaveFolder(f.savePath, f.backupRoot, T2);
+  backupSaveFolder(f.savePath, f.backupRoot, T1);
+  assert.deepEqual(listBackups(f.backupRoot), ["2026-09-19T20-00-00-000Z", "2026-09-19T20-05-00-000Z"]);
+});
+
+test("restoreBackup puts the old bytes back and keeps a safety backup", (t) => {
+  const f = makeSaveFixture();
+  t.after(f.cleanup);
+  const original = readFileSync(f.savePath);
+  const b = backupSaveFolder(f.savePath, f.backupRoot, T1);
+  writeFileSync(f.savePath, "changed");
+  const r = restoreBackup(f.savePath, f.backupRoot, b.name, T2);
+  assert.deepEqual(readFileSync(f.savePath), original);
+  assert.equal(r.restored, b.name);
+  assert.equal(readFileSync(join(r.safetyBackup.path, "game.db"), "utf8"), "changed");
+});
+
+test("restoreBackup rejects unknown names and path tricks", (t) => {
+  const f = makeSaveFixture();
+  t.after(f.cleanup);
+  assert.throws(() => restoreBackup(f.savePath, f.backupRoot, "nope"), /No backup called/);
+  assert.throws(() => restoreBackup(f.savePath, f.backupRoot, "../save"), /No backup called/);
+});

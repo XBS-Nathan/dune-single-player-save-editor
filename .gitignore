@@ -10,3 +10,6 @@ canonical-customizations.json
 
 # Agent workflow scratch
 .superpowers/
+
+# Single-player save backups (copies of the real save)
+single-player-backups/
