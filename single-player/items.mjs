@@ -57,7 +57,8 @@ export function positionClaimer(db, inventoryId, maxItemCount) {
   };
 }
 
-// New ids come from items_id_sequencer (not AUTOINCREMENT); stay above max(id) in case the two disagree.
+// items.id is AUTOINCREMENT, but the game draws new ids from items_id_sequencer instead, so we
+// do the same; stay above max(id) in case the two disagree. SQLite maintains sqlite_sequence itself.
 export function allocateItemIds(db, count) {
   if (count === 0) return [];
   const seq = db.prepare("select next_id from items_id_sequencer limit 1").get();
@@ -113,6 +114,20 @@ export function giveItem(db, templateId, quantity, {
   return { templateId, requested: quantity, total: plan.total, clamped: clampReason !== null, clampReason, inserted, warnings };
 }
 
+// Any table with an ON DELETE CASCADE foreign key into items would silently lose rows
+// if we deleted an item they point at. Find the first such row, if any.
+function findItemReference(db, itemId) {
+  const tables = db.prepare("select name from sqlite_master where type = 'table' and name != 'items'").all();
+  for (const { name: table } of tables) {
+    const fks = db.prepare(`pragma foreign_key_list("${table}")`).all();
+    for (const fk of fks) {
+      if (fk.table !== "items") continue;
+      if (db.prepare(`select 1 from "${table}" where "${fk.from}" = ? limit 1`).get(itemId)) return table;
+    }
+  }
+  return null;
+}
+
 export function removeItem(db, itemId, quantity) {
   if (quantity !== undefined && (!Number.isInteger(quantity) || quantity < 1)) {
     throw new Error("Quantity must be a whole number of at least 1");
@@ -123,10 +138,12 @@ export function removeItem(db, itemId, quantity) {
     from items it join inventories inv on inv.id = it.inventory_id
     where it.id = ? and inv.actor_id = ?`).get(itemId, pawnId);
   if (!row) throw new Error(`Item ${itemId} is not in this character's inventories`);
-  // Deleting a container item would cascade to its inventory and contents.
-  if (db.prepare("select 1 from inventories where item_id = ?").get(itemId)) {
+  const referencedBy = findItemReference(db, itemId);
+  if (referencedBy === "inventories") {
+    // Deleting a container item would cascade to its inventory and contents.
     throw new Error(`Item ${itemId} holds its own inventory; remove it in game instead`);
   }
+  if (referencedBy) throw new Error(`Item ${itemId} is referenced by ${referencedBy}; remove it in game instead`);
   if (quantity === undefined || quantity >= row.stackSize) {
     db.prepare("delete from items where id = ?").run(itemId);
     return { templateId: row.templateId, removed: row.stackSize, remaining: 0 };

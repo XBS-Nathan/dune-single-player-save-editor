@@ -145,3 +145,11 @@ test("removeItem refuses other actors' items, containers and bad quantities", ()
     assert.throws(() => removeItem(db, 10), /holds its own inventory/);
   });
 });
+
+test("removeItem refuses when another table still references the item", () => {
+  withDb({ items: [{ id: 10, position: 0, templateId: "Stone", stackSize: 5 }] }, (db) => {
+    db.prepare("insert into building_blueprints (id, item_id) values (1, 10)").run();
+    assert.throws(() => removeItem(db, 10), /Item 10 is referenced by building_blueprints; remove it in game instead/);
+    assert.equal(db.prepare("select count(*) as c from items where id = 10").get().c, 1);
+  });
+});
