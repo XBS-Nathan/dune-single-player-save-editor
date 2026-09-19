@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { makeSaveFixture } from "./helpers.mjs";
 import { backupName, backupSaveFolder, listBackups, restoreBackup } from "../../single-player/backup.mjs";
 
@@ -47,6 +47,31 @@ test("restoreBackup puts the old bytes back and keeps a safety backup", (t) => {
   assert.deepEqual(readFileSync(f.savePath), original);
   assert.equal(r.restored, b.name);
   assert.equal(readFileSync(join(r.safetyBackup.path, "game.db"), "utf8"), "changed");
+  assert.deepEqual(r.leftInPlace, []);
+});
+
+test("restore reports files that were added after the backup in leftInPlace", (t) => {
+  const f = makeSaveFixture();
+  t.after(f.cleanup);
+  const b = backupSaveFolder(f.savePath, f.backupRoot, T1);
+  const autosaveDir = join(dirname(f.savePath), "autosave");
+  mkdirSync(autosaveDir, { recursive: true });
+  writeFileSync(join(autosaveDir, "9.bak"), "new-autosave");
+  const r = restoreBackup(f.savePath, f.backupRoot, b.name, T2);
+  assert.deepEqual(r.leftInPlace, ["autosave/9.bak"]);
+  assert.equal(existsSync(join(autosaveDir, "9.bak")), true);
+});
+
+test("after restore, game.db is restored atomically and tmp file is cleaned up", (t) => {
+  const f = makeSaveFixture();
+  t.after(f.cleanup);
+  const original = readFileSync(f.savePath);
+  const b = backupSaveFolder(f.savePath, f.backupRoot, T1);
+  writeFileSync(f.savePath, "changed");
+  const r = restoreBackup(f.savePath, f.backupRoot, b.name, T2);
+  assert.deepEqual(readFileSync(f.savePath), original);
+  assert.equal(existsSync(`${f.savePath}.tmp`), false);
+  assert.deepEqual(readFileSync(join(b.path, "game.db")), original);
 });
 
 test("restoreBackup rejects unknown names and path tricks", (t) => {
