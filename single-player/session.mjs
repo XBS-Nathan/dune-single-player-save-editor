@@ -1,9 +1,10 @@
 // Opens the single-player save for reading or for one transactional edit.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { writeFileAtomic } from "./atomic.mjs";
 import { backupSaveFolder } from "./backup.mjs";
 import { pack, unpack } from "./savefile.mjs";
 
@@ -49,6 +50,7 @@ export function readSave(savePath, fn) {
 export function editSave(savePath, fn, { force = false, dryRun = false, listProcesses, backupRoot, now = () => new Date() } = {}) {
   if (!backupRoot) throw new Error("editSave needs a backupRoot");
   assertGameClosed({ force, listProcesses });
+  const originalBytes = readFileSync(savePath);
   return withUnpackedCopy(savePath, (dbPath) => {
     const db = new DatabaseSync(dbPath);
     let result;
@@ -70,10 +72,11 @@ export function editSave(savePath, fn, { force = false, dryRun = false, listProc
     } finally {
       db.close();
     }
+    if (!readFileSync(savePath).equals(originalBytes)) {
+      throw new Error("The save changed on disk while editing (is the game running?); nothing was written");
+    }
     const backup = backupSaveFolder(savePath, backupRoot, now());
-    const tmpPath = `${savePath}.tmp`;
-    writeFileSync(tmpPath, pack(readFileSync(dbPath)));
-    renameSync(tmpPath, savePath);
+    writeFileAtomic(savePath, pack(readFileSync(dbPath)));
     return { result, dryRun: false, backup };
   });
 }

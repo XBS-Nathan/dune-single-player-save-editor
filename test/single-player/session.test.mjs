@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gameRunning, makeSaveFixture, noGame } from "./helpers.mjs";
 import { editSave, isGameRunning, readSave } from "../../single-player/session.mjs";
@@ -67,5 +67,17 @@ test("a failing edit leaves the save and backups untouched", (t) => {
   assert.throws(() => editSave(f.savePath, (db) => { setSolari(db, 5); throw new Error("boom"); },
     { listProcesses: noGame, backupRoot: f.backupRoot, now }), /boom/);
   assert.deepEqual(readFileSync(f.savePath), original);
+  assert.equal(existsSync(f.backupRoot), false);
+});
+
+test("editSave refuses to write if the save changed on disk while editing", (t) => {
+  const f = makeSaveFixture({ solari: 1000 });
+  t.after(f.cleanup);
+  assert.throws(() => editSave(f.savePath, (db) => {
+    setSolari(db, 5);
+    writeFileSync(f.savePath, "changed-by-the-game"); // simulate the game rewriting the save mid-edit
+  }, { listProcesses: noGame, backupRoot: f.backupRoot, now }),
+    /The save changed on disk while editing \(is the game running\?\); nothing was written/);
+  assert.equal(readFileSync(f.savePath, "utf8"), "changed-by-the-game");
   assert.equal(existsSync(f.backupRoot), false);
 });
