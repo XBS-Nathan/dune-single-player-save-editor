@@ -7,3 +7,6 @@ backup-tech-*.json
 snapshot-player-*.json
 player-properties-dump.json
 canonical-customizations.json
+
+# Agent workflow scratch
+.superpowers/
