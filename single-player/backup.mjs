@@ -1,6 +1,8 @@
 // Backups copy the save's whole folder (game.db, autosaves, SOLO/, ...).
-import { cpSync, existsSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative, sep } from "node:path";
+import { cpSync, existsSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { basename, dirname, join, sep } from "node:path";
+import { writeFileAtomic } from "./atomic.mjs";
+import { unpack } from "./savefile.mjs";
 
 export function backupName(date = new Date()) {
   return date.toISOString().replace(/[:.]/g, "-");
@@ -10,14 +12,20 @@ export function backupSaveFolder(savePath, backupRoot, date = new Date()) {
   const name = backupName(date);
   const path = join(backupRoot, name);
   if (existsSync(path)) throw new Error(`Backup ${name} already exists`);
-  cpSync(dirname(savePath), path, { recursive: true, errorOnExist: true, force: false });
+  // Copy into a .partial dir and rename it into place once the copy is complete, so a backup that
+  // is interrupted partway through never looks like a finished one; remove any leftover from a
+  // previous failed attempt first.
+  const partialPath = `${path}.partial`;
+  rmSync(partialPath, { recursive: true, force: true });
+  cpSync(dirname(savePath), partialPath, { recursive: true, errorOnExist: true, force: false });
+  renameSync(partialPath, path);
   return { name, path };
 }
 
 export function listBackups(backupRoot) {
   if (!existsSync(backupRoot)) return [];
   return readdirSync(backupRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isDirectory() && !entry.name.endsWith(".partial"))
     .map((entry) => entry.name)
     .sort();
 }
@@ -28,7 +36,6 @@ function computeLeftInPlace(liveDir, backupDir) {
 
   function walk(relDir) {
     const livePath = join(liveDir, relDir);
-    const backupPath = join(backupDir, relDir);
 
     if (!existsSync(livePath)) return;
 
@@ -55,6 +62,13 @@ export function restoreBackup(savePath, backupRoot, name, date = new Date()) {
   const liveDir = dirname(savePath);
   const backupPath = join(backupRoot, name);
 
+  // Validate the backup's game.db BEFORE touching the live folder, so a bad backup changes nothing.
+  try {
+    unpack(readFileSync(join(backupPath, "game.db")));
+  } catch {
+    throw new Error(`Backup "${name}" has no valid game.db; nothing was restored`);
+  }
+
   // Compute leftInPlace BEFORE taking the safety backup
   const leftInPlace = computeLeftInPlace(liveDir, backupPath);
 
@@ -68,10 +82,7 @@ export function restoreBackup(savePath, backupRoot, name, date = new Date()) {
     cpSync(join(backupPath, entry.name), join(liveDir, entry.name), { recursive: true, force: true });
   }
 
-  // Restore game.db atomically via temp file + rename
-  const tmpPath = `${savePath}.tmp`;
-  writeFileSync(tmpPath, readFileSync(join(backupPath, "game.db")));
-  renameSync(tmpPath, savePath);
+  writeFileAtomic(savePath, readFileSync(join(backupPath, "game.db")));
 
   return { restored: name, safetyBackup, leftInPlace };
 }
