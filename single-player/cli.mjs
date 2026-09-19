@@ -111,9 +111,10 @@ export async function main(argv, {
         const g = r.result;
         for (const w of g.warnings) out(`Warning: ${w}`);
         const what = `${entry.name} (${entry.id}) in ${g.inserted.length} stack(s)`;
+        const verb = opts.dryRun ? "Would add" : "Added";
         out(g.clamped
-          ? `Added ${g.total} of the requested ${g.requested} ${what}; limited by backpack ${g.clampReason}.`
-          : `Added ${g.total} ${what}.`);
+          ? `${verb} ${g.total} of the requested ${g.requested} ${what}; limited by backpack ${g.clampReason}.`
+          : `${verb} ${g.total} ${what}.`);
         reportWrite(r);
         return 0;
       }
@@ -149,6 +150,7 @@ export async function main(argv, {
         if (args.length !== 1) throw new Error("Usage: restore <name>");
         assertGameClosed({ force: opts.force, listProcesses });
         if (opts.dryRun) {
+          if (!listBackups(backupRoot).includes(args[0])) throw new Error(`No backup called "${args[0]}"`);
           out(`Dry run: would restore ${args[0]}.`);
           return 0;
         }

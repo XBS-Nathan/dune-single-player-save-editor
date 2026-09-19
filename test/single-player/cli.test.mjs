@@ -88,6 +88,23 @@ test("give reports a partial result when the backpack is short of slots", async 
   assert.match(r.out, /Added 500 of the requested 700/);
 });
 
+test("give --dry-run says what would happen instead of what happened", async (t) => {
+  const f = fixture(t, { slots: 5 });
+  const before = readFileSync(f.savePath);
+  const r = await run(f, ["--save", f.savePath, "--dry-run", "give", "Copper Ore", "700"]);
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out, /Would add 700 Copper Ore \(AzuriteOre\) in 2 stack\(s\)/);
+  assert.match(r.out, /Dry run: nothing was written/);
+  assert.deepEqual(readFileSync(f.savePath), before);
+});
+
+test("give --dry-run reports a partial result with would-add wording", async (t) => {
+  const f = fixture(t, { slots: 1 });
+  const r = await run(f, ["--save", f.savePath, "--dry-run", "give", "AzuriteOre", "700"]);
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out, /Would add 500 of the requested 700/);
+});
+
 test("give uses --stack for items the catalogue has no stack size for", async (t) => {
   const f = fixture(t, { slots: 5 });
   const r = await run(f, ["--save", f.savePath, "give", "SolarisCoin", "250", "--stack", "100"]);
@@ -148,6 +165,23 @@ test("backups lists them and restore brings one back", async (t) => {
   assert.equal(r.code, 0, r.err);
   assert.match(r.out, new RegExp(`Restored ${name}`));
   assert.equal(readSave(f.savePath, getSolari), 1000);
+});
+
+test("restore --dry-run validates the name like a real restore would", async (t) => {
+  const f = fixture(t, { solari: 1000 });
+  const r = await run(f, ["--save", f.savePath, "--dry-run", "restore", "nope"]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /No backup called/);
+});
+
+test("restore --dry-run reports what it would do for a real backup", async (t) => {
+  const f = fixture(t, { solari: 1000 });
+  await run(f, ["--save", f.savePath, "solari", "set", "1"]);
+  const name = (await run(f, ["--save", f.savePath, "backups"])).out.trim().split("\n")[0];
+  const r = await run(f, ["--save", f.savePath, "--dry-run", "restore", name]);
+  assert.equal(r.code, 0, r.err);
+  assert.match(r.out, new RegExp(`Dry run: would restore ${name}`));
+  assert.equal(readSave(f.savePath, getSolari), 1);
 });
 
 test("restore handles leftInPlace files", async (t) => {
