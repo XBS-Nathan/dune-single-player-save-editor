@@ -1,18 +1,10 @@
 node_modules/
-.env
 
-# Player-state dumps (large + contain account-tied IDs)
-backup-customizations-*.json
-backup-tech-*.json
-snapshot-player-*.json
-player-properties-dump.json
-canonical-customizations.json
+# Save backups (copies of the real save)
+single-player-backups/
 
 # Agent workflow scratch
 .superpowers/
-
-# Single-player save backups (copies of the real save)
-single-player-backups/
 
 # Local planning docs (not published)
 docs/superpowers/plans/
