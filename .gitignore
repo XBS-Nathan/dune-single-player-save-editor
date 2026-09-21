@@ -13,3 +13,6 @@ canonical-customizations.json
 
 # Single-player save backups (copies of the real save)
 single-player-backups/
+
+# Local planning docs (not published)
+docs/superpowers/plans/
